@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument("--old", required=True, type=str, help="old string (to be replaced)")
     parser.add_argument("--new", required=True, type=str, help="new string (to replace old)")
     parser.add_argument("--output", required=True, type=str, help="output BAM file path")
-    parser.add_argument("--input", type=str, help="input BAM file path")
+    parser.add_argument("--input", required=True, type=str, help="input BAM file path")
     return parser.parse_args() 
 
 def main():
