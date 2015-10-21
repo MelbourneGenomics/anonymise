@@ -50,8 +50,6 @@ def main():
                     new_tag = read.get_tag('RG').replace(args.old, args.new)
                     read.set_tag('RG', new_tag)
                 bam_output.write(read)
-    bam_input.close()
-    bam_output.close()
 
 if __name__ == '__main__':
     main()
