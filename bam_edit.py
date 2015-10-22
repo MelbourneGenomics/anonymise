@@ -42,6 +42,9 @@ def main():
                 if 'ID' in read_group:
                     new_id = read_group['ID'].replace(args.old, args.new)
                     read_group['ID'] = new_id
+                if 'SM' in read_group:
+                    new_sm = read_group['SM'].replace(args.old, args.new)
+                    read_group['SM'] = new_sm
         with pysam.AlignmentFile(args.output, "wb", header=input_header) as bam_output:
             # replace old with new in the query name for each read
             for read in bam_input:
