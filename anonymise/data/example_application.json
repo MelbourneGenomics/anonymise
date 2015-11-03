@@ -1,0 +1,26 @@
+{"request id": "FAKE_REQ_ID1",
+    "application id": "FAKE_APP_ID15",
+    "project description": "Fake Project Description",
+    "ethics": "Fake Ethics Description",
+    "research_related": "TRUE",
+    "filter_results": "TRUE",
+    "method_dev": "FALSE",
+    "return_results": "FALSE",
+    "genes_approved": "FALSE",
+    "reconsent_patient": "FALSE",
+    "identifiability": "Re-identifiable",
+    "requestor_comments": "",
+    "condition": {
+        "aml": "FALSE",
+        "epil": "TRUE",
+        "cs": "FALSE",
+        "crc": "TRUE",
+        "cmt": "FALSE",
+        "control_na12878": "FALSE"
+    },
+    "file types": {
+        "fastq": "FALSE",
+        "bam": "TRUE",
+        "vcf": "FALSE"
+    }
+}

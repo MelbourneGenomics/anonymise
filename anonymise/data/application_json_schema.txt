@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "Melbourne Genomics Application",
+  "type": "object",
+  "properties": {
+    "request id": {
+      "id": "request id",
+      "type": "string",
+      "minLength": 1
+    },
+    "application id": {
+      "id": "application id",
+      "type": "string",
+      "minLength": 1
+    },
+    "project description": {
+      "id": "project description",
+      "type": "string",
+      "minLength": 1
+    },
+    "ethics": {
+      "id": "ethics",
+      "type": "string",
+      "minLength": 1
+    },
+    "research_related": {
+      "id": "research_related",
+      "type": "string",
+      "minLength": 1
+    },
+    "filter_results": {
+      "id": "filter_results",
+      "type": "string",
+      "minLength": 1
+    },
+    "method_dev": {
+      "id": "method_dev",
+      "type": "string",
+      "minLength": 1
+    },
+    "return_results": {
+      "id": "return_results",
+      "type": "string",
+      "minLength": 1
+    },
+    "genes_approved": {
+      "id": "genes_approved",
+      "type": "string",
+      "minLength": 1
+    },
+    "reconsent_patient": {
+      "id": "reconsent_patient",
+      "type": "string",
+      "minLength": 1
+    },
+    "identifiability": {
+      "id": "identifiability",
+      "type": "string",
+      "minLength": 1
+    },
+    "requestor_comments": {
+      "id": "requestor_comments",
+      "type": "string",
+      "minLength": 0
+    },
+    "condition": {
+      "id": "condition",
+      "type": "object",
+      "properties": {
+        "aml": {
+          "id": "aml",
+          "type": "string",
+          "minLength": 1
+        },
+        "epil": {
+          "id": "epil",
+          "type": "string",
+          "minLength": 1
+        },
+        "cs": {
+          "id": "cs",
+          "type": "string",
+          "minLength": 1
+        },
+        "crc": {
+          "id": "crc",
+          "type": "string",
+          "minLength": 1
+        },
+        "cmt": {
+          "id": "cmt",
+          "type": "string",
+          "minLength": 1
+        },
+        "control_na12878": {
+          "id": "control_na12878",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "file types": {
+      "id": "file types",
+      "type": "object",
+      "properties": {
+        "fastq": {
+          "id": "fastq",
+          "type": "string",
+          "minLength": 1
+        },
+        "bam": {
+          "id": "bam",
+          "type": "string",
+          "minLength": 1
+        },
+        "vcf": {
+          "id": "vcf",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request id",
+    "application id",
+    "project description",
+    "ethics",
+    "research_related",
+    "filter_results",
+    "method_dev",
+    "return_results",
+    "genes_approved",
+    "reconsent_patient",
+    "identifiability",
+    "requestor_comments",
+    "condition",
+    "file types"
+  ]
+}
