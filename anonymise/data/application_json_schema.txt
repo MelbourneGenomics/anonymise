@@ -67,33 +67,33 @@
       "id": "condition",
       "type": "object",
       "properties": {
-        "aml": {
-          "id": "aml",
+        "AML": {
+          "id": "AML",
           "type": "string",
           "minLength": 1
         },
-        "epil": {
-          "id": "epil",
+        "EPIL": {
+          "id": "EPIL",
           "type": "string",
           "minLength": 1
         },
-        "cs": {
-          "id": "cs",
+        "CS": {
+          "id": "CS",
           "type": "string",
           "minLength": 1
         },
-        "crc": {
-          "id": "crc",
+        "CRC": {
+          "id": "CRC",
           "type": "string",
           "minLength": 1
         },
-        "cmt": {
-          "id": "cmt",
+        "CMT": {
+          "id": "CMT",
           "type": "string",
           "minLength": 1
         },
-        "control_na12878": {
-          "id": "control_na12878",
+        "CONTROL_NA12878": {
+          "id": "CONTROL_NA12878",
           "type": "string",
           "minLength": 1
         }

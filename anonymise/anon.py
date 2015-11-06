@@ -20,12 +20,16 @@ from __future__ import print_function
 import json
 import os
 import sys
+import csv
 from argparse import ArgumentParser
 from jsonschema import validate, ValidationError
 from pkg_resources import resource_filename
 from collections import namedtuple
 
 
+COHORTS = ["AML", "EPIL", "CS", "CRC", "CMT"]
+METADATA_FILENAME = "samples.txt"
+BATCHES_DIR_NAME = "batches"
 JSON_SCHEMA = "application_json_schema.txt"
 PROGRAM_NAME = "anonymise"
 ERROR_MAKE_DIR = 1
@@ -43,6 +47,7 @@ def parse_args():
     """Orchestrate the anonymisation process for Melbourne Genomics"""
     parser = ArgumentParser(description="Orchestrate the anonymisation process for Melbourne Genomics")
     parser.add_argument("--app", required=True, type=str, help="name of input application JSON file")
+    parser.add_argument("--data", required=True, type=str, help="directory containing production data")
     return parser.parse_args() 
 
 
@@ -198,6 +203,43 @@ REQUEST_COMBINATIONS = {
         reconsent_patient='FALSE'): ['Re-identifiable', 'Future', 'Return'],
 }
 
+def get_samples_metadata(cohorts, metadata_filename):
+    result = []
+    with open(metadata_filename) as metadata_file:
+        reader = csv.DictReader(metadata_file, delimiter='\t')
+        for row in reader:
+            if row["Cohort"] in cohorts:
+                result.append(row)
+    return result
+
+
+# We assume batch filenames are all digits and nothing else
+def is_batch_dir(filename):
+    return filename.isdigit()
+
+# Metadata desribing samples is in:
+#    $datadir/batches/$batchNum/samples.txt
+# batch numbers are directory names with three digits in their name
+# (seems limiting, so we will assume any directory with all digits
+# in its name is a batch)
+def get_sample_metadata_for_cohorts(datadir, cohorts):
+    '''Return a dictionary mapping batch number to a list of sample
+    metadata, for all samples in the desired cohort'''
+    batch_sample_infos = {}
+    batches_dir = os.path.join(datadir, BATCHES_DIR_NAME)
+    batches_dir_contents = os.listdir(batches_dir)
+    for file in batches_dir_contents:
+        if is_batch_dir(file):
+            batch_number = file 
+            samples_metadata_path = os.path.join(batches_dir, batch_number, METADATA_FILENAME)
+            samples_infos = get_samples_metadata(cohorts, samples_metadata_path)
+            batch_sample_infos[batch_number] = samples_infos
+    return batch_sample_infos
+
+def get_requested_cohorts(application):
+    '''Return a list of all the cohorts requested in an application'''
+    return [cohort for cohort in COHORTS if application["condition"][cohort] == "TRUE"]
+            
 
 def main():
     args = parse_args()
@@ -205,9 +247,13 @@ def main():
         application = json.load(application_filename) 
         validate_json(application_filename, application)
         data_available = get_data_available(application) 
-        if data_available is not []:
-            print(data_available)
-            create_app_dir(application)
+        if len(data_available) > 0:
+            cohorts = get_requested_cohorts(application)
+            batch_sample_infos = get_sample_metadata_for_cohorts(args.data, cohorts)
+            for batch in batch_sample_infos:
+                print(batch)
+                for info in batch_sample_infos[batch]:
+                    print(info)
         else:
             print("No data available for this application")
         

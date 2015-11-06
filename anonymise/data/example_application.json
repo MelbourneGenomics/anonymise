@@ -11,12 +11,12 @@
     "identifiability": "Re-identifiable",
     "requestor_comments": "",
     "condition": {
-        "aml": "FALSE",
-        "epil": "TRUE",
-        "cs": "FALSE",
-        "crc": "TRUE",
-        "cmt": "FALSE",
-        "control_na12878": "FALSE"
+        "AML": "FALSE",
+        "EPIL": "TRUE",
+        "CS": "FALSE",
+        "CRC": "TRUE",
+        "CMT": "FALSE",
+        "CONTROL_NA12878": "FALSE"
     },
     "file types": {
         "fastq": "FALSE",
