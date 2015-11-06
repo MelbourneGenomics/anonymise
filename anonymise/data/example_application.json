@@ -19,7 +19,7 @@
         "CONTROL_NA12878": "FALSE"
     },
     "file types": {
-        "fastq": "FALSE",
+        "fastq": "TRUE",
         "bam": "TRUE",
         "vcf": "FALSE"
     }

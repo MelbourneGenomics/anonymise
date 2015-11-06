@@ -27,9 +27,13 @@ from pkg_resources import resource_filename
 from collections import namedtuple
 
 
+FILE_TYPES = ["fastq", "bam", "vcf"]
 COHORTS = ["AML", "EPIL", "CS", "CRC", "CMT"]
 METADATA_FILENAME = "samples.txt"
 BATCHES_DIR_NAME = "batches"
+FASTQ_DIR_NAME = "data"
+BAM_DIR_NAME = "align"
+VCF_DIR_NAME = "variants"
 JSON_SCHEMA = "application_json_schema.txt"
 PROGRAM_NAME = "anonymise"
 ERROR_MAKE_DIR = 1
@@ -240,6 +244,44 @@ def get_requested_cohorts(application):
     '''Return a list of all the cohorts requested in an application'''
     return [cohort for cohort in COHORTS if application["condition"][cohort] == "TRUE"]
             
+def get_requested_file_types(application):
+    '''Return a list of all the file types requested in an application'''
+    return [file_type for file_type in FILE_TYPES if application["file types"][file_type] == "TRUE"]
+
+def get_fastq_files(data_dir, batch_sample_infos):
+    results = [] 
+    for batch in batch_sample_infos:
+        fastq_dir = os.path.join(data_dir, BATCHES_DIR_NAME, batch, FASTQ_DIR_NAME)
+        requested_sample_ids = set() 
+        for sample in batch_sample_infos[batch]:
+            requested_sample_ids.add(sample["Sample_ID"])
+        all_filenames = os.listdir(fastq_dir)
+        for filename in all_filenames:
+            fields = filename.split("_")
+            if len(fields) > 0:
+                filename_sample_id = fields[0]
+                if filename_sample_id in requested_sample_ids:
+                    full_fastq_path = os.path.join(fastq_dir, filename)
+                    results.append(full_fastq_path)
+    return results
+
+# XXX fixme
+def get_bam_files(data_dir, batch_sample_infos):
+    return []
+
+# XXX fixme
+def get_vcf_files(data_dir, batch_sample_infos):
+    return []
+
+def get_files(data_dir, batch_sample_infos, file_types):
+    fastqs = bams = vcfs = []
+    if "fastq" in file_types:
+        fastqs = get_fastq_files(data_dir, batch_sample_infos)
+    if "bam" in file_types:
+        bams = get_bam_files(data_dir, batch_sample_infos)
+    if "vcf" in file_types:
+        vcfs = get_vcf_files(data_dir, batch_sample_infos)
+    return fastqs, bams, vcfs
 
 def main():
     args = parse_args()
@@ -250,10 +292,15 @@ def main():
         if len(data_available) > 0:
             cohorts = get_requested_cohorts(application)
             batch_sample_infos = get_sample_metadata_for_cohorts(args.data, cohorts)
-            for batch in batch_sample_infos:
-                print(batch)
-                for info in batch_sample_infos[batch]:
-                    print(info)
+            #for batch in batch_sample_infos:
+            #    print(batch)
+            #    for info in batch_sample_infos[batch]:
+            #        print(info)
+            file_types = get_requested_file_types(application)
+            fastqs, bams, vcfs = get_files(args.data, batch_sample_infos, file_types)
+            for fastq in fastqs:
+                print(fastq)
+
         else:
             print("No data available for this application")
         
