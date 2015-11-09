@@ -14,12 +14,12 @@
         "AML": "FALSE",
         "EPIL": "TRUE",
         "CS": "FALSE",
-        "CRC": "TRUE",
+        "CRC": "FALSE",
         "CMT": "FALSE",
         "CONTROL_NA12878": "FALSE"
     },
     "file types": {
-        "fastq": "TRUE",
+        "fastq": "FALSE",
         "bam": "TRUE",
         "vcf": "FALSE"
     }

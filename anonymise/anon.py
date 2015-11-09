@@ -32,7 +32,8 @@ COHORTS = ["AML", "EPIL", "CS", "CRC", "CMT"]
 METADATA_FILENAME = "samples.txt"
 BATCHES_DIR_NAME = "batches"
 FASTQ_DIR_NAME = "data"
-BAM_DIR_NAME = "align"
+ANALYSIS_DIR_NAME = "analysis"
+ALIGN_DIR_NAME = "align"
 VCF_DIR_NAME = "variants"
 JSON_SCHEMA = "application_json_schema.txt"
 PROGRAM_NAME = "anonymise"
@@ -41,6 +42,8 @@ ERROR_JSON_SCHEMA_DEFINE = 2
 ERROR_JSON_SCHEMA_OPEN = 3
 ERROR_JSON_SCHEMA_INVALID = 4
 ERROR_INVALID_APPLICATION = 5
+BAM_SUFFIX = "merge.dedup.realign.recal.bam"
+BAI_SUFFIX = "merge.dedup.realign.recal.bai" 
 
 
 def print_error(message):
@@ -90,6 +93,7 @@ def create_app_dir(application):
         print_error("failed to make directory {}".format(PROGRAM_NAME, dir))
         print(e, file=sys.stderr)
         exit(ERROR_MAKE_DIR)
+    return path
 
 
 def get_data_available(application):
@@ -265,9 +269,24 @@ def get_fastq_files(data_dir, batch_sample_infos):
                     results.append(full_fastq_path)
     return results
 
-# XXX fixme
 def get_bam_files(data_dir, batch_sample_infos):
-    return []
+    results = [] 
+    for batch in batch_sample_infos:
+        bam_dir = os.path.join(data_dir, BATCHES_DIR_NAME, batch, ANALYSIS_DIR_NAME, ALIGN_DIR_NAME)
+        requested_sample_ids = set() 
+        for sample in batch_sample_infos[batch]:
+            requested_sample_ids.add(sample["Sample_ID"])
+        all_filenames = os.listdir(bam_dir)
+        for filename in all_filenames:
+            head, tail = os.path.split(filename)
+            if tail.endswith(BAM_SUFFIX) or tail.endswith(BAI_SUFFIX):
+                fields = filename.split(".")
+                if len(fields) > 0:
+                    filename_sample_id = fields[0]
+                    if filename_sample_id in requested_sample_ids:
+                        full_bam_path = os.path.join(bam_dir, filename)
+                        results.append(full_bam_path)
+    return results
 
 # XXX fixme
 def get_vcf_files(data_dir, batch_sample_infos):
@@ -283,6 +302,13 @@ def get_files(data_dir, batch_sample_infos, file_types):
         vcfs = get_vcf_files(data_dir, batch_sample_infos)
     return fastqs, bams, vcfs
 
+def link_files(application_dir, filepaths):
+    for path in filepaths:
+        _, filename = os.path.split(path)
+        link_name = os.path.join(application_dir, filename)
+        os.symlink(path, link_name)
+        #print((path, link_name))
+
 def main():
     args = parse_args()
     with open(args.app) as application_filename:
@@ -292,19 +318,13 @@ def main():
         if len(data_available) > 0:
             cohorts = get_requested_cohorts(application)
             batch_sample_infos = get_sample_metadata_for_cohorts(args.data, cohorts)
-            #for batch in batch_sample_infos:
-            #    print(batch)
-            #    for info in batch_sample_infos[batch]:
-            #        print(info)
             file_types = get_requested_file_types(application)
-            fastqs, bams, vcfs = get_files(args.data, batch_sample_infos, file_types)
-            for fastq in fastqs:
-                print(fastq)
-
+            vcfs, bams, fastqs = get_files(args.data, batch_sample_infos, file_types)
+            application_dir = create_app_dir(application)
+            link_files(application_dir, vcfs + bams + fastqs)
         else:
             print("No data available for this application")
         
-
 
 if __name__ == '__main__':
     main()
