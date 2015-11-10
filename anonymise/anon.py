@@ -21,10 +21,12 @@ import json
 import os
 import sys
 import csv
+import random
 from argparse import ArgumentParser
 from jsonschema import validate, ValidationError
 from pkg_resources import resource_filename
 from collections import namedtuple
+import sqlite3
 
 
 FILE_TYPES = ["fastq", "bam", "vcf"]
@@ -44,6 +46,14 @@ ERROR_JSON_SCHEMA_INVALID = 4
 ERROR_INVALID_APPLICATION = 5
 BAM_SUFFIX = "merge.dedup.realign.recal.bam"
 BAI_SUFFIX = "merge.dedup.realign.recal.bai" 
+DEFAULT_METADATA_OUT_FILENAME = "samples.out.txt"
+DEFAULT_USED_IDS_DATABASE = "used_random_sample_ids.db"
+# Start the minimum random sample ID at some non-low number.
+# Users might think there is something special about low number IDs
+MIN_RANDOM_ID = 1000
+# XXX This may not be portable: we might want to pick a high
+# maximum value ourselves
+MAX_RANDOM_ID = sys.maxint
 
 
 def print_error(message):
@@ -53,8 +63,16 @@ def print_error(message):
 def parse_args():
     """Orchestrate the anonymisation process for Melbourne Genomics"""
     parser = ArgumentParser(description="Orchestrate the anonymisation process for Melbourne Genomics")
-    parser.add_argument("--app", required=True, type=str, help="name of input application JSON file")
-    parser.add_argument("--data", required=True, type=str, help="directory containing production data")
+    parser.add_argument("--app", required=True, type=str,
+        help="name of input application JSON file")
+    parser.add_argument("--data", required=True,
+        type=str, help="directory containing production data")
+    parser.add_argument("--metaout",
+        required=False, default=DEFAULT_METADATA_OUT_FILENAME, type=str,
+        help="name of output metadatafile, defaults to {}".format(DEFAULT_METADATA_OUT_FILENAME))
+    parser.add_argument("--usedids", required=False,
+        default=DEFAULT_USED_IDS_DATABASE, type=str,
+        help="sqlite3 databsae of previously used randomised sample ids defaults to {}".format(DEFAULT_USED_IDS_DATABASE))
     return parser.parse_args() 
 
 
@@ -218,7 +236,7 @@ def get_samples_metadata(cohorts, metadata_filename):
         for row in reader:
             if row["Cohort"] in cohorts:
                 result.append(row)
-    return result
+        return reader.fieldnames, result
 
 
 # We assume batch filenames are all digits and nothing else
@@ -230,9 +248,10 @@ def is_batch_dir(filename):
 # batch numbers are directory names with three digits in their name
 # (seems limiting, so we will assume any directory with all digits
 # in its name is a batch)
-def get_sample_metadata_for_cohorts(datadir, cohorts):
+def get_samples_metadata_for_cohorts(datadir, cohorts):
     '''Return a dictionary mapping batch number to a list of sample
     metadata, for all samples in the desired cohort'''
+    sample_ids = set([])
     batch_sample_infos = {}
     batches_dir = os.path.join(datadir, BATCHES_DIR_NAME)
     batches_dir_contents = os.listdir(batches_dir)
@@ -240,9 +259,11 @@ def get_sample_metadata_for_cohorts(datadir, cohorts):
         if is_batch_dir(file):
             batch_number = file 
             samples_metadata_path = os.path.join(batches_dir, batch_number, METADATA_FILENAME)
-            samples_infos = get_samples_metadata(cohorts, samples_metadata_path)
+            fieldnames, samples_infos = get_samples_metadata(cohorts, samples_metadata_path)
             batch_sample_infos[batch_number] = samples_infos
-    return batch_sample_infos
+            for info in samples_infos:
+                sample_ids.add(info['Sample_ID'])
+    return fieldnames, batch_sample_infos, sample_ids
 
 def get_requested_cohorts(application):
     '''Return a list of all the cohorts requested in an application'''
@@ -307,7 +328,54 @@ def link_files(application_dir, filepaths):
         _, filename = os.path.split(path)
         link_name = os.path.join(application_dir, filename)
         os.symlink(path, link_name)
-        #print((path, link_name))
+
+def output_metadata(output_filename, fieldnames, batch_sample_infos):
+    with open(output_filename, "w") as output_file:
+        writer = csv.DictWriter(output_file, fieldnames, delimiter='\t')
+        writer.writeheader()
+        for batch in sorted(batch_sample_infos):
+            for info in batch_sample_infos[batch]:
+                writer.writerow(info)
+
+def make_random_id():
+    return random.randint(MIN_RANDOM_ID, MAX_RANDOM_ID)
+
+# We keep an sqlite database of previously used random IDs. This ensures that
+# we never re-use the same random ID. It may seem like overkill to use a
+# database, but the benefit is that sqlite will handle the locking of
+# database access, so that we do not have race conditions if multiple instances
+# of this program run at the same time.
+# If the database does not exist we will create a new empty one.
+def make_random_ids(used_ids_database, sample_ids):
+    conn = sqlite3.connect(used_ids_database)
+    cursor = conn.cursor()
+    cursor.execute('CREATE TABLE IF NOT EXISTS unique_ids (id integer)')
+    # The set of IDs that have already been used
+    used_ids = set([])
+    # Grab all the IDs from the database
+    for (next_used_id,) in cursor.execute('SELECT * from unique_ids'):
+        used_ids.add(next_used_id)
+    # The newly generated IDs by the call to this function
+    new_ids = []
+    # A list of pairs containing the original ID and its new randomised ID
+    result = []
+    for old_sample in sample_ids:
+        # Make sure the newly generated ID has not been seen before
+        new_id = make_random_id()
+        while new_id in used_ids:
+            new_id = make_random_id()
+        result.append((old_sample, new_id))
+        # Record this new ID in the set of previously used IDs so we don't
+        # use it again
+        used_ids.add(new_id)
+        new_ids.append(new_id)
+    # Write the newly created IDs out to the database
+    # XXX should be able to do this as a single INSERT statement
+    for new_id in new_ids:
+        cursor.execute('INSERT into unique_ids (id) VALUES ({})'.format(new_id))
+    conn.commit()
+    return result
+
 
 def main():
     args = parse_args()
@@ -317,11 +385,14 @@ def main():
         data_available = get_data_available(application) 
         if len(data_available) > 0:
             cohorts = get_requested_cohorts(application)
-            batch_sample_infos = get_sample_metadata_for_cohorts(args.data, cohorts)
+            fieldnames, batch_sample_infos, sample_ids = get_samples_metadata_for_cohorts(args.data, cohorts)
             file_types = get_requested_file_types(application)
             vcfs, bams, fastqs = get_files(args.data, batch_sample_infos, file_types)
-            application_dir = create_app_dir(application)
-            link_files(application_dir, vcfs + bams + fastqs)
+            #application_dir = create_app_dir(application)
+            #link_files(application_dir, vcfs + bams + fastqs)
+            output_metadata(args.metaout, fieldnames, batch_sample_infos)
+            randomised_ids = make_random_ids(args.usedids, sample_ids)
+            print(randomised_ids)
         else:
             print("No data available for this application")
         
