@@ -44,6 +44,7 @@ ERROR_JSON_SCHEMA_DEFINE = 2
 ERROR_JSON_SCHEMA_OPEN = 3
 ERROR_JSON_SCHEMA_INVALID = 4
 ERROR_INVALID_APPLICATION = 5
+ERROR_INCOMPATIBLE_REQUEST = 6
 BAM_SUFFIX = "merge.dedup.realign.recal.bam"
 BAI_SUFFIX = "merge.dedup.realign.recal.bai" 
 DEFAULT_METADATA_OUT_FILENAME = "samples.out.txt"
@@ -114,6 +115,11 @@ def create_app_dir(application):
     return path
 
 
+# available is a list of allowed results, any of:
+# Anonymised, Future, Return, Re-identifiable
+def check_request_compatible(requested, available):
+    return requested in available
+
 def get_data_available(application):
     '''Based on the input application, decide what data is available
     to the requestor.'''
@@ -124,7 +130,13 @@ def get_data_available(application):
         print_error("Application does not have a valid interpretation")
         print(format(json.dumps(application, indent=4)), file=sys.stderr)
         exit(ERROR_INVALID_APPLICATION)
-    return result_combinations 
+    # check that what was requested is compatible with what is available
+    requested_identifiability = application['identifiability']
+    if check_request_compatible(requested_identifiability, result_combinations):
+        return result_combinations 
+    else:
+        print_error("Requested identifiability {} is not compatible with allowed results {}".format(requested_identifiability, result_combinations))
+        exit(ERROR_INCOMPATIBLE_REQUEST)
          
 
 def application_to_request(application):
