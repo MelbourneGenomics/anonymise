@@ -1,6 +1,7 @@
 import os
 import csv
 from constants import BATCHES_DIR_NAME
+from error import print_error, ERROR_RANDOMISE_ID
 
 METADATA_FILENAME = "samples.txt"
 DEFAULT_METADATA_OUT_FILENAME = "samples.out.txt"
@@ -40,11 +41,34 @@ class Metadata(object):
         # set of all batches used by all samples in all cohorts
         self.batches = { sample['Batch'] for sample in self.samples }
         # set of all sample IDs used by all samples in all cohorts
+        self.update_sample_ids()
+
+    def update_sample_ids(self):
         self.sample_ids = { sample['Sample_ID'] for sample in self.samples }
 
     def filter_consent(self, consent_file, allowed_data_types):
         # XXX fixme, don't forget to filter the self.sample_ids as well
         pass
+
+    def anonymise(self, randomised_ids):
+        for sample in self.samples:
+            old_id = sample['Sample_ID']
+            try:
+                sample['Sample_ID'] = randomised_ids[old_id]
+            except KeyError:
+                print_error("Cannot anonymise sample {}".format(old_id))
+                exit(ERROR_RANDOMISE_ID)
+        self.update_sample_ids()
+
+    def write(self, filename):
+        with open(filename, 'w') as out_file:
+            writer = csv.DictWriter(out_file, fieldnames=METADATA_HEADINGS)
+            writer.writeheader()
+            for sample in self.samples:
+                writer.writerow(sample)
+
+    def get_sample_ids(self):
+        return self.sample_ids
 
 
 def get_batch_metadata(cohorts, metadata_filename):

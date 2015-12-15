@@ -14,27 +14,27 @@ Orchestrate the anonymisation process for Melbourne Genomics
 Usage:
 
 Authors: Bernie Pope, Gayle Philip
+
+TODO:
+    - decide if we are using filtered or unfiltered VCF files
 '''
 
 from __future__ import print_function
 import os
 import sys
 import random
+import logging
 from argparse import ArgumentParser
 import sqlite3
-from error import print_error, ERROR_MAKE_DIR
+from error import print_error, ERROR_MAKE_DIR, ERROR_BAD_ALLOWED_DATA
 from application import Application
 from random_id import make_random_ids, DEFAULT_USED_IDS_DATABASE
 from constants import BATCHES_DIR_NAME
 from metadata import Metadata, DEFAULT_METADATA_OUT_FILENAME
+from get_files import get_files, FileTypeException, VCF_filename, BAM_filename
+from vcf_edit import vcf_edit
+from bam_edit import bam_edit
 
-FASTQ_DIR_NAME = "data"
-ANALYSIS_DIR_NAME = "analysis"
-ALIGN_DIR_NAME = "align"
-VCF_DIR_NAME = "variants"
-BAM_SUFFIX = "merge.dedup.realign.recal.bam"
-BAI_SUFFIX = "merge.dedup.realign.recal.bai" 
-FASTQ_SUFFIX = "fastq.gz"
 
 def parse_args():
     """Orchestrate the anonymisation process for Melbourne Genomics"""
@@ -51,6 +51,8 @@ def parse_args():
         help="sqlite3 databsae of previously used randomised sample ids defaults to {}".format(DEFAULT_USED_IDS_DATABASE))
     parser.add_argument("--consent", required=True, type=str,
         help="file path of consent metadata{}")
+    parser.add_argument('--log', metavar='FILE', type=str, \
+        help='Log progress in FILENAME, defaults to stdout.')
     return parser.parse_args() 
 
 
@@ -60,62 +62,10 @@ def create_app_dir(application):
     try:
         os.makedirs(path)
     except OSError as e:
-        print_error("failed to make directory {}".format(PROGRAM_NAME, dir))
+        print_error("failed to make directory {}".format(path))
         print(e, file=sys.stderr)
         exit(ERROR_MAKE_DIR)
     return path
-
-
-def get_files_by_type(metadata, make_dir_name, get_sample_from_filename):
-    results = [] 
-    for batch in metadata.batches:
-        dir = make_dir_name(batch)
-        all_filenames = os.listdir(dir)
-        for filename in all_filenames:
-            filename_sample_id = get_sample_from_filename(filename)
-            if (filename_sample_id is not None) and \
-               (filename_sample_id in metadata.sample_ids):
-                full_path = os.path.join(dir, filename)
-                results.append(full_path)
-    return results
-
-
-def get_fastq_files(data_dir, metadata):
-    def make_dir_name(batch):
-        return os.path.join(data_dir, BATCHES_DIR_NAME, batch, FASTQ_DIR_NAME)
-    def get_sample_from_filename(filename):
-        if filename.endswith(FASTQ_SUFFIX):
-            fields = filename.split("_")
-            if len(fields) > 0:
-                return fields[0]
-    return get_files_by_type(metadata, make_dir_name, get_sample_from_filename)
-
-
-def get_bam_files(data_dir, metadata):
-    def make_dir_name(batch):
-        return os.path.join(data_dir, BATCHES_DIR_NAME, batch, ANALYSIS_DIR_NAME, ALIGN_DIR_NAME)
-    def get_sample_from_filename(filename):
-        if filename.endswith(BAM_SUFFIX) or filename.endswith(BAI_SUFFIX):
-            fields = filename.split(".")
-            if len(fields) > 0:
-                filename_sample_id = fields[0]
-                return filename_sample_id
-    return get_files_by_type(metadata, make_dir_name, get_sample_from_filename)
-
-# XXX fixme
-def get_vcf_files(data_dir, metadata):
-    return []
-
-
-def get_files(data_dir, file_types, metadata):
-    fastqs = bams = vcfs = []
-    if "fastq" in file_types:
-        fastqs = get_fastq_files(data_dir, metadata)
-    if "bam" in file_types:
-        bams = get_bam_files(data_dir, metadata)
-    if "vcf" in file_types:
-        vcfs = get_vcf_files(data_dir, metadata)
-    return fastqs, bams, vcfs
 
 
 def link_files(application_dir, filepaths):
@@ -125,30 +75,85 @@ def link_files(application_dir, filepaths):
         os.symlink(path, link_name)
 
 
+def anonymise_files(filenames, randomised_ids, application_dir, filename_type, file_editor):
+    for file_path in filenames:
+        try:
+            file_handler = filename_type(file_path)
+        except FileTypeException:
+            # skip this file 
+            continue 
+        else:
+            old_id = file_handler.get_sample_id()
+            if old_id is None or old_id not in randomised_ids:
+                print_error("Cannot randomise this file: {}".format(file_path))
+                exit(ERROR_RANDOMISE_ID)
+            else:
+                new_id = str(randomised_ids[old_id])
+                file_handler.replace_sample_id(new_id)
+                new_filename = file_handler.get_filename()
+                new_path = os.path.join(application_dir, new_filename)
+                file_editor(old_id, new_id, file_path, new_path)
+                logging.info("Anonymised {} to {}".format(file_path, new_path))
+
+
+def init_log(log_file):
+    '''Set up log output, if log_file is None, output does to stderr'''
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.DEBUG,
+        filemode='w',
+        format='%(asctime)s %(message)s',
+        datefmt='%m/%d/%Y %H:%M:%S')
+    logging.info('Program started')
+    logging.info('Command line: {0}'.format(' '.join(sys.argv)))
+
+
 def main():
     args = parse_args()
-    with open(args.app) as app_filename:
+    init_log(args.log)
+    with open(args.app) as app_file:
         # parse and validate the requested data application JSON file
-        application = Application(app_filename) 
+        application = Application(app_file) 
+        logging.info("Input data application parsed: {}".format(args.app))
         # check what data types are allowed for this application
         allowed_data_types = application.allowed_data_types()
+        logging.info("Allowed data types: {}".format(' '.join(allowed_data_types)))
         if len(allowed_data_types) > 0:
             # Get all the sample metadata for all requested cohorts
-            metadata = Metadata(args.data, application.cohorts())
+            requested_cohorts = application.cohorts()
+            metadata = Metadata(args.data, requested_cohorts)
+            logging.info("Metadata collected for requested cohorts: {}".format(' '.join(requested_cohorts)))
+            metadata_sample_ids = sorted(metadata.get_sample_ids())
+            logging.info("Metadata for sample IDs: {}".format(' '.join(metadata_sample_ids)))
             # Filter the sample metadata based on patient consent
             metadata.filter_consent(args.consent, allowed_data_types)
+            logging.info("Metadata filtered by consent")
             # Find all the file paths for requested file types for each
             # consented sample
-            vcfs, bams, fastqs = get_files(args.data, application.file_types(), metadata)
+            requested_file_types = application.file_types()
+            logging.info("Requested file types: {}".format(' '.join(requested_file_types)))
+            fastqs, bams, bais, vcfs = get_files(args.data, requested_file_types, metadata)
+            logging.info("VCF files:\n{}".format('\n'.join(vcfs)))
+            logging.info("BAM files:\n{}".format('\n'.join(bams)))
+            logging.info("BAI files:\n{}".format('\n'.join(bais)))
+            logging.info("FASTQ files:\n{}".format('\n'.join(fastqs)))
             # Create output directory for the results
-            #application_dir = create_app_dir(application)
+            application_dir = create_app_dir(application)
             if 'Anonymised' in allowed_data_types:
                 randomised_ids = make_random_ids(args.usedids, metadata.sample_ids)
-                print(randomised_ids)
                 # XXX randomise sample IDs in metadata
-                meta_data.write(args.metaout)
-            #elif 'Re-identifiable' in allowed_data_types:
-            #    link_files(application_dir, vcfs + bams + fastqs)
+                metadata.anonymise(randomised_ids)
+                metadata.write(args.metaout)
+                logging.info("Anonymised metadata written to: {}".format(args.metaout))
+                anonymise_files(vcfs, randomised_ids, application_dir, VCF_filename, vcf_edit)
+                anonymise_files(bams, randomised_ids, application_dir, BAM_filename, bam_edit)
+            elif 'Re-identifiable' in allowed_data_types:
+                link_files(application_dir, vcfs + bams_bais + fastqs)
+                logging.info("Files linked in directory: {}".format(application_dir))
+                metadata.write(args.metaout)
+            else:
+                print_error("Allowed data is neither anonymised nor re-identifiable")
+                exit(ERROR_BAD_ALLOWED_DATA)
         else:
             print("No data available for this application")
         

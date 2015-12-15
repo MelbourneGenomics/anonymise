@@ -29,20 +29,23 @@ def parse_args():
     parser.add_argument("--input", required=True, type=str, help="input VCF file path")
     return parser.parse_args() 
 
-def main():
-    args = parse_args()
-    with open(args.input) as input_file, \
-         open(args.output, "w") as output_file:
+def vcf_edit(old, new, input_filename, output_filename):
+    with open(input_filename) as input_file, \
+         open(output_filename, "w") as output_file:
         for line in input_file:
             if line.startswith('#'):
                 # this replaces all occurrences of old with new
                 # on the input line
                 # We assume header lines start with at least one '#'
                 # character.
-                new_line = line.replace(args.old, args.new)
+                new_line = line.replace(old, new)
             else:
                 new_line = line
             output_file.write(new_line)
+
+def main():
+    args = parse_args()
+    vcf_edit(args.old, args.new, args.input, args.output)
 
 if __name__ == '__main__':
     main()

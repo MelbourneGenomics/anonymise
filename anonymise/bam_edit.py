@@ -32,27 +32,32 @@ def parse_args():
     parser.add_argument("--input", required=True, type=str, help="input BAM file path")
     return parser.parse_args() 
 
-def main():
-    args = parse_args()
-    with pysam.AlignmentFile(args.input, "r") as bam_input:
+def bam_edit(old, new, input_filename, output_filename):
+    print((old, new, input_filename, output_filename))
+    with pysam.AlignmentFile(input_filename, "r") as bam_input:
         input_header = bam_input.header
         # replace old with new in the ID field of RG in the header
         if 'RG' in input_header:
             for read_group in input_header['RG']:
                 if 'ID' in read_group:
-                    new_id = read_group['ID'].replace(args.old, args.new)
+                    new_id = read_group['ID'].replace(old, new)
                     read_group['ID'] = new_id
                 if 'SM' in read_group:
-                    new_sm = read_group['SM'].replace(args.old, args.new)
+                    new_sm = read_group['SM'].replace(old, new)
                     read_group['SM'] = new_sm
-        with pysam.AlignmentFile(args.output, "wb", header=input_header) as bam_output:
+        with pysam.AlignmentFile(output_file, "wb", header=input_header) as bam_output:
             # replace old with new in the query name for each read
             for read in bam_input:
-                read.query_name = read.query_name.replace(args.old, args.new)
+                read.query_name = read.query_name.replace(old, new)
                 if read.has_tag('RG'):
-                    new_tag = read.get_tag('RG').replace(args.old, args.new)
+                    new_tag = read.get_tag('RG').replace(old, new)
                     read.set_tag('RG', new_tag)
                 bam_output.write(read)
+
+def main():
+    args = parse_args()
+    bam_edit(args.old, args.new, args.input, args.output)
+
 
 if __name__ == '__main__':
     main()

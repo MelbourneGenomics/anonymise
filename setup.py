@@ -19,6 +19,7 @@ setup(
     long_description=('Anonymise data'),
     install_requires=[
         "jsonschema == 2.5.1",
-        "functools32"
+        "functools32",
+        "pysam"
     ],
 )
