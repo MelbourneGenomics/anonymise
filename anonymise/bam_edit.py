@@ -33,7 +33,6 @@ def parse_args():
     return parser.parse_args() 
 
 def bam_edit(old, new, input_filename, output_filename):
-    print((old, new, input_filename, output_filename))
     with pysam.AlignmentFile(input_filename, "r") as bam_input:
         input_header = bam_input.header
         # replace old with new in the ID field of RG in the header
@@ -45,7 +44,7 @@ def bam_edit(old, new, input_filename, output_filename):
                 if 'SM' in read_group:
                     new_sm = read_group['SM'].replace(old, new)
                     read_group['SM'] = new_sm
-        with pysam.AlignmentFile(output_file, "wb", header=input_header) as bam_output:
+        with pysam.AlignmentFile(output_filename, "wb", header=input_header) as bam_output:
             # replace old with new in the query name for each read
             for read in bam_input:
                 read.query_name = read.query_name.replace(old, new)

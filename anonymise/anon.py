@@ -34,11 +34,13 @@ from metadata import Metadata, DEFAULT_METADATA_OUT_FILENAME
 from get_files import get_files, FileTypeException, VCF_filename, BAM_filename
 from vcf_edit import vcf_edit
 from bam_edit import bam_edit
+from version import program_version
 
 
 def parse_args():
     """Orchestrate the anonymisation process for Melbourne Genomics"""
-    parser = ArgumentParser(description="Orchestrate the anonymisation process for Melbourne Genomics")
+    parser = ArgumentParser(description="Orchestrate the anonymisation process for Melbourne Genomics, version {}".format(program_version))
+    parser.add_argument('--version', action='version', version='%(prog)s ' + program_version)
     parser.add_argument("--app", required=True, type=str,
         help="name of input application JSON file")
     parser.add_argument("--data", required=True,
