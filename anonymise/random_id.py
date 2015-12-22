@@ -1,3 +1,9 @@
+'''
+Generate random identifiers for anonymisation.
+
+Previously used random identifiers are stored in an SQLite database.
+'''
+
 import random
 import sys
 import sqlite3

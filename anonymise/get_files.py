@@ -1,3 +1,13 @@
+'''
+File manipulation code.
+
+The anonymisation program deals with a number of file types
+and naming conventions.
+
+This module tries to abstract over the file finding and manipulation
+routines.
+'''
+
 import os.path
 import logging
 from metadata import BATCHES_DIR_NAME
@@ -17,6 +27,7 @@ VCF_DIR_NAME = "variants"
 def get_files(data_dir, file_types, metadata):
     fastqs = []
     bams = []
+    bais = []
     vcfs = []
     if "fastq" in file_types:
         fastqs = get_files_by_type(data_dir, metadata, FASTQ_filename) 

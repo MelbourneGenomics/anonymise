@@ -1,3 +1,7 @@
+'''
+Metadata processing.
+'''
+
 import os
 import csv
 from constants import BATCHES_DIR_NAME

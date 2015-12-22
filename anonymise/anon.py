@@ -17,6 +17,9 @@ Authors: Bernie Pope, Gayle Philip
 
 TODO:
     - decide if we are using filtered or unfiltered VCF files
+    - check if BAI files need anonymising
+    - check consent
+    - file uploading
 '''
 
 from __future__ import print_function
@@ -26,35 +29,40 @@ import random
 import logging
 from argparse import ArgumentParser
 import sqlite3
-from error import print_error, ERROR_MAKE_DIR, ERROR_BAD_ALLOWED_DATA
+from error import print_error, ERROR_MAKE_DIR, ERROR_BAD_ALLOWED_DATA, ERROR_MD5
 from application import Application
 from random_id import make_random_ids, DEFAULT_USED_IDS_DATABASE
 from constants import BATCHES_DIR_NAME
 from metadata import Metadata, DEFAULT_METADATA_OUT_FILENAME
-from get_files import get_files, FileTypeException, VCF_filename, BAM_filename
+from get_files import get_files, FileTypeException, VCF_filename, BAM_filename, BAI_filename, FASTQ_filename
 from vcf_edit import vcf_edit
 from bam_edit import bam_edit
 from version import program_version
+from subprocess import call
 
+
+DEFAULT_MD5_COMMAND = "openssl md5"
 
 def parse_args():
     """Orchestrate the anonymisation process for Melbourne Genomics"""
     parser = ArgumentParser(description="Orchestrate the anonymisation process for Melbourne Genomics, version {}".format(program_version))
     parser.add_argument('--version', action='version', version='%(prog)s ' + program_version)
     parser.add_argument("--app", required=True, type=str,
-        help="name of input application JSON file")
+        help="Name of input application JSON file")
     parser.add_argument("--data", required=True,
-        type=str, help="directory containing production data")
+        type=str, help="Directory containing production data")
     parser.add_argument("--metaout",
         required=False, default=DEFAULT_METADATA_OUT_FILENAME, type=str,
-        help="name of output metadatafile, defaults to {}".format(DEFAULT_METADATA_OUT_FILENAME))
+        help="Name of output metadatafile, defaults to {}".format(DEFAULT_METADATA_OUT_FILENAME))
     parser.add_argument("--usedids", required=False,
         default=DEFAULT_USED_IDS_DATABASE, type=str,
-        help="sqlite3 databsae of previously used randomised sample ids defaults to {}".format(DEFAULT_USED_IDS_DATABASE))
+        help="Sqlite3 databsae of previously used randomised sample ids defaults to {}".format(DEFAULT_USED_IDS_DATABASE))
     parser.add_argument("--consent", required=True, type=str,
-        help="file path of consent metadata{}")
+        help="File path of consent metadata")
+    parser.add_argument("--md5", required=False, type=str, default=DEFAULT_MD5_COMMAND,
+        help="MD5 checksum command, defaults to {}".format(DEFAULT_MD5_COMMAND))
     parser.add_argument('--log', metavar='FILE', type=str, \
-        help='Log progress in FILENAME, defaults to stdout.')
+        help='Log progress in FILENAME, defaults to stdout')
     return parser.parse_args() 
 
 
@@ -71,13 +79,17 @@ def create_app_dir(application):
 
 
 def link_files(application_dir, filepaths):
+    output_files = []
     for path in filepaths:
         _, filename = os.path.split(path)
         link_name = os.path.join(application_dir, filename)
+        output_files.append(link_name)
         os.symlink(path, link_name)
+    return output_files
 
 
-def anonymise_files(filenames, randomised_ids, application_dir, filename_type, file_editor):
+def anonymise_files(filenames, randomised_ids, application_dir, filename_type, file_editor=None):
+    output_files = []
     for file_path in filenames:
         try:
             file_handler = filename_type(file_path)
@@ -94,8 +106,14 @@ def anonymise_files(filenames, randomised_ids, application_dir, filename_type, f
                 file_handler.replace_sample_id(new_id)
                 new_filename = file_handler.get_filename()
                 new_path = os.path.join(application_dir, new_filename)
-                file_editor(old_id, new_id, file_path, new_path)
-                logging.info("Anonymised {} to {}".format(file_path, new_path))
+                output_files.append(new_path)
+                if file_editor is not None:
+                    file_editor(old_id, new_id, file_path, new_path)
+                    logging.info("Anonymised {} to {}".format(file_path, new_path))
+                else:
+                    os.symlink(file_path, new_path)
+                    logging.info("Linked {} to {}".format(new_path, file_path))
+    return output_files
 
 
 def init_log(log_file):
@@ -110,6 +128,19 @@ def init_log(log_file):
     logging.info('Command line: {0}'.format(' '.join(sys.argv)))
 
 
+def md5_files(md5_command, filenames):
+    for filename in filenames:
+        output_filename = filename + ".md5"
+        logging.info("{} {} > {}".format(md5_command, filename, output_filename))
+        with open(output_filename, "w") as out_file:
+            try:
+                command = md5_command.split() + [filename]
+                call(command, stdout=out_file)
+            except OSError as e:
+                print_error(e)
+                exit(ERROR_MD5)
+
+
 def main():
     args = parse_args()
     init_log(args.log)
@@ -117,6 +148,8 @@ def main():
         # parse and validate the requested data application JSON file
         application = Application(app_file) 
         logging.info("Input data application parsed: {}".format(args.app))
+        # Create output directory for the results
+        application_dir = create_app_dir(application)
         # check what data types are allowed for this application
         allowed_data_types = application.allowed_data_types()
         logging.info("Allowed data types: {}".format(' '.join(allowed_data_types)))
@@ -129,37 +162,44 @@ def main():
             logging.info("Metadata for sample IDs: {}".format(' '.join(metadata_sample_ids)))
             # Filter the sample metadata based on patient consent
             metadata.filter_consent(args.consent, allowed_data_types)
-            logging.info("Metadata filtered by consent")
+            logging.warning("Consent not handled yet. FIXME")
             # Find all the file paths for requested file types for each
             # consented sample
             requested_file_types = application.file_types()
             logging.info("Requested file types: {}".format(' '.join(requested_file_types)))
             fastqs, bams, bais, vcfs = get_files(args.data, requested_file_types, metadata)
-            logging.info("VCF files:\n{}".format('\n'.join(vcfs)))
-            logging.info("BAM files:\n{}".format('\n'.join(bams)))
-            logging.info("BAI files:\n{}".format('\n'.join(bais)))
-            logging.info("FASTQ files:\n{}".format('\n'.join(fastqs)))
-            # Create output directory for the results
-            application_dir = create_app_dir(application)
+            logging.info("VCF files selected:\n{}".format('\n'.join(vcfs)))
+            logging.info("BAM files selected:\n{}".format('\n'.join(bams)))
+            logging.info("BAI files selected:\n{}".format('\n'.join(bais)))
+            logging.info("FASTQ files selected:\n{}".format('\n'.join(fastqs)))
+            output_files = []
             if 'Anonymised' in allowed_data_types:
+                # generate random IDs for all output samples
                 randomised_ids = make_random_ids(args.usedids, metadata.sample_ids)
-                # XXX randomise sample IDs in metadata
                 metadata.anonymise(randomised_ids)
                 metadata.write(args.metaout)
                 logging.info("Anonymised metadata written to: {}".format(args.metaout))
-                anonymise_files(vcfs, randomised_ids, application_dir, VCF_filename, vcf_edit)
-                anonymise_files(bams, randomised_ids, application_dir, BAM_filename, bam_edit)
+                new_vcfs = anonymise_files(vcfs, randomised_ids, application_dir, VCF_filename, vcf_edit)
+                new_bams = anonymise_files(bams, randomised_ids, application_dir, BAM_filename, bam_edit)
+                # BAIs and FASTQs are just sym-linked to output with randomised name
+                new_bais = anonymise_files(bais, randomised_ids, application_dir, BAI_filename)
+                new_fastqs = anonymise_files(fastqs, randomised_ids, application_dir, FASTQ_filename)
+                output_files.extend(new_vcfs + new_bams + new_bais + new_fastqs)
+                logging.info("Output files are anonymised")
             elif 'Re-identifiable' in allowed_data_types:
-                link_files(application_dir, vcfs + bams_bais + fastqs)
+                new_links = link_files(application_dir, vcfs + bams_bais + fastqs)
+                output_files.extend(new_links)
                 logging.info("Files linked in directory: {}".format(application_dir))
                 metadata.write(args.metaout)
+                logging.info("Output files are re-identifiable")
             else:
                 print_error("Allowed data is neither anonymised nor re-identifiable")
                 exit(ERROR_BAD_ALLOWED_DATA)
+            logging.info("Generating MD5 checksums on output files")
+            md5_files(args.md5, output_files)
         else:
-            print("No data available for this application")
+            logging.warning("No data available for this application")
         
 
 if __name__ == '__main__':
     main()
-

@@ -1,5 +1,5 @@
 '''
-Manipulation of data request application
+Manipulation of data request application, including validation against a schema.
 
 Usage:
 
