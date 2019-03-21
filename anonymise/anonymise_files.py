@@ -33,6 +33,10 @@ def init_db():
     return db
 
 def get_samples(request_id, flagship):
+    """
+    Find all the samples from this flagship to be released for this data request
+
+    """
     db = init_db()
     samples = db.data_requests.find(filter={'flagship_id': flagship, 'data_request_id': request_id},
                                     projection=['flagship_id', 'lab_sample_id', 'batch_no'])
@@ -41,13 +45,17 @@ def get_samples(request_id, flagship):
     return [sample for sample in samples]
 
 def get_new_batch_ids(samples):
-    # new_batch_num_digits = 5
+    """
+    Given a list of FASTQ filenames, get a list of new anonymised batch IDs
 
+    """
     new_batch_ids = {}
     batch_number = 0
     length = 5
+    batch_prefix = 'AGRF_'
+
     for sample in samples:
-        agrf_batch_no = 'AGRF_' + sample['batch_no']
+        agrf_batch_no = batch_prefix + sample['batch_no']
         if len(new_batch_ids) == 0 or agrf_batch_no not in new_batch_ids:
             batch_number += 1
             new_batch_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for x in range(length))

@@ -112,6 +112,10 @@ class FASTQ_filename(Data_filename):
 
     @staticmethod
     def get_fields(filename):
+        """
+        A field is a substring in filename separated by '_'
+
+        """
         return filename.split("_")
 
     @staticmethod
@@ -146,6 +150,10 @@ class FASTQ_filename(Data_filename):
         self.absolute_path = new_path
 
     def replace_field(self, new_id, field_index_start, field_index_end=None):
+        """
+        A field is a substring in filename separated by '_'
+
+        """
         filename = self.get_filename()
         fields = self.get_fields(filename)
         directory = self.get_directory()
