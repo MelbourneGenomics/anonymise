@@ -27,14 +27,15 @@ import os
 import sys
 import random
 import logging
+import string
 from argparse import ArgumentParser
 import sqlite3
-from error import print_error, ERROR_MAKE_DIR, ERROR_BAD_ALLOWED_DATA, ERROR_MD5
+from error import print_error, ERROR_MAKE_DIR, ERROR_BAD_ALLOWED_DATA, ERROR_MD5, ERROR_RANDOMISE_ID
 from application import Application
 from random_id import make_random_ids, DEFAULT_USED_IDS_DATABASE
 from constants import BATCHES_DIR_NAME
 from metadata import Metadata, DEFAULT_METADATA_OUT_FILENAME
-from get_files import get_files, FileTypeException, VCF_filename, BAM_filename, BAI_filename, FASTQ_filename
+from get_files import get_files, Data_filename, FileTypeException, VCF_filename, BAM_filename, BAI_filename, FASTQ_filename
 from vcf_edit import vcf_edit
 from bam_edit import bam_edit
 from version import program_version
@@ -61,7 +62,7 @@ def parse_args():
         help="File path of consent metadata")
     parser.add_argument("--md5", required=False, type=str, default=DEFAULT_MD5_COMMAND,
         help="MD5 checksum command, defaults to {}".format(DEFAULT_MD5_COMMAND))
-    parser.add_argument('--log', metavar='FILE', type=str, \
+    parser.add_argument('--log', metavar='FILE', type=str,
         help='Log progress in FILENAME, defaults to stdout')
     return parser.parse_args() 
 
@@ -88,8 +89,10 @@ def link_files(application_dir, filepaths):
     return output_files
 
 
-def anonymise_files(filenames, randomised_ids, application_dir, filename_type, file_editor=None):
+def anonymise_files(filenames: list[str], randomised_ids: list[str], application_dir: str, filename_type: Data_filename, file_editor=None):
     output_files = []
+    randomised_batch_ids = {}
+
     for file_path in filenames:
         try:
             file_handler = filename_type(file_path)
@@ -97,6 +100,7 @@ def anonymise_files(filenames, randomised_ids, application_dir, filename_type, f
             # skip this file 
             continue 
         else:
+            # sample id
             old_id = file_handler.get_sample_id()
             if old_id is None or old_id not in randomised_ids:
                 print_error("Cannot randomise this file: {}".format(file_path))
@@ -104,15 +108,33 @@ def anonymise_files(filenames, randomised_ids, application_dir, filename_type, f
             else:
                 new_id = str(randomised_ids[old_id])
                 file_handler.replace_sample_id(new_id)
-                new_filename = file_handler.get_filename()
-                new_path = os.path.join(application_dir, new_filename)
-                output_files.append(new_path)
-                if file_editor is not None:
-                    file_editor(old_id, new_id, file_path, new_path)
-                    logging.info("Anonymised {} to {}".format(file_path, new_path))
-                else:
-                    os.symlink(file_path, new_path)
-                    logging.info("Linked {} to {}".format(new_path, file_path))
+
+            # Replace batch id AGRF_024 with XXXXX
+            # Example filename: 010108101_AGRF_024_HG3JKBCXX_CGTACTAG_L001_R1.fastq.gz
+            fields = file_handler.get_fields(file_handler.get_filename())
+
+            # Example old_batch_id: AGRF_024
+            old_batch_id = fields[1] + '_' + fields[2]
+
+            # Key by old_batch_id because we want to make sure the same batch id gets the same new randomised batch id
+            if old_batch_id not in randomised_batch_ids:
+                new_batch_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for x in range(5))
+                randomised_batch_ids[old_batch_id] = new_batch_id
+
+            # Replace AGRF_024 (field 1 and 2) with XXXXX
+            file_handler.replace_field(randomised_batch_ids[old_batch_id], 1, 2)
+
+            # file_handler has updated filename (attribute of this object) at this point
+            new_filename = file_handler.get_filename()
+            new_path = os.path.join(application_dir, new_filename)
+            output_files.append(new_path)
+            if file_editor is not None:
+                file_editor(old_id, new_id, file_path, new_path)
+                logging.info("Anonymised {} to {}".format(file_path, new_path))
+            else:
+                os.symlink(file_path, new_path)
+                logging.info("Linked {} to {}".format(new_path, file_path))
+
     return output_files
 
 
@@ -187,7 +209,7 @@ def main():
                 output_files.extend(new_vcfs + new_bams + new_bais + new_fastqs)
                 logging.info("Output files are anonymised")
             elif 'Re-identifiable' in allowed_data_types:
-                new_links = link_files(application_dir, vcfs + bams_bais + fastqs)
+                new_links = link_files(application_dir, vcfs + bams + bais + fastqs)
                 output_files.extend(new_links)
                 logging.info("Files linked in directory: {}".format(application_dir))
                 metadata.write(args.metaout)

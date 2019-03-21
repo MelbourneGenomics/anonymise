@@ -105,17 +105,76 @@ class Data_filename(object):
         new_path = os.path.join(directory, new_id + rest)
         self.absolute_path = new_path
 
+
 class FASTQ_filename(Data_filename):
     def __init__(self, absolute_path):
         Data_filename.__init__(self, absolute_path, FASTQ_SUFFIX)
 
     @staticmethod
     def get_fields(filename):
+        """
+        A field is a substring in filename separated by '_'
+
+        """
         return filename.split("_")
 
     @staticmethod
     def make_batch_dir(data_dir, batch):
         return os.path.join(data_dir, BATCHES_DIR_NAME, batch, FASTQ_DIR_NAME)
+
+    def split_sample_id(self):
+        filename = self.get_filename()
+        fields = self.get_fields(filename)
+        if len(fields) > 0:
+            # SAMPLEID_AGRF_111_HHMN7BCXX_TAAGGCGA_L001_R1.fastq.gz
+            # get rid of _AGRF_111
+            # prefix_len = len(fields[0]) + 1 + len(fields[1]) + 1 + len(fields[2])
+
+            prefix_len = len(fields[0])
+            return fields[0], filename[prefix_len:]
+        else:
+            print_error("Cannot find sample ID in filename: {}".format(self.absolute_path))
+            exit(BAD_FILENAME)
+
+    def get_sample_id(self):
+        filename = self.get_filename()
+        fields = self.get_fields(filename)
+        return fields[0]
+
+    def replace_sample_id(self, new_id):
+        filename = self.get_filename()
+        fields = self.get_fields(filename)
+        directory = self.get_directory()
+        prefix_len = len(fields[0])
+        new_path = os.path.join(directory, new_id + filename[prefix_len:])
+        self.absolute_path = new_path
+
+    def replace_field(self, new_id, field_index_start, field_index_end=None):
+        """
+        A field is a substring in filename separated by '_'
+
+        """
+        filename = self.get_filename()
+        fields = self.get_fields(filename)
+        directory = self.get_directory()
+
+        if field_index_end == None:
+            field_index_end = field_index_start
+
+        # batch id is in this format AGRF_001
+        prefix = ''
+        for index in range(field_index_start):
+            # len of the field + len of '_'
+            prefix += fields[index] + '_'
+
+        replaced = ''
+        for index in range(field_index_start, field_index_end+1):
+            replaced += fields[index] + '_'
+
+        suffix_start = len(prefix + replaced) - 1
+
+        new_path = os.path.join(directory, prefix + new_id + filename[suffix_start:])
+        self.absolute_path = new_path
 
 
 class BAM_filename(Data_filename):

@@ -16,7 +16,8 @@ DEFAULT_USED_IDS_DATABASE = "used_random_sample_ids.db"
 MIN_RANDOM_ID = 1000
 # XXX This may not be portable: we might want to pick a high
 # maximum value ourselves
-MAX_RANDOM_ID = sys.maxint
+#MAX_RANDOM_ID = sys.maxint
+MAX_RANDOM_ID = sys.maxsize
 
 def make_one_random_id():
     return random.randint(MIN_RANDOM_ID, MAX_RANDOM_ID)
@@ -48,7 +49,7 @@ def make_random_ids(used_ids_database, sample_ids):
             if iter_count >= MAX_RANDOM_ID_ITERATIONS:
                 print_error("Could not make a new random ID, iteration count exceeded")
                 exit(ERROR_RANDOM_ID_ITERATIONS)
-            new_id = make_random_id()
+            new_id = make_one_random_id()
             iter_count += 1
         result[old_sample] = new_id
         # Record this new ID in the set of previously used IDs so we don't
