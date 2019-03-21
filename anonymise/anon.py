@@ -35,7 +35,7 @@ from application import Application
 from random_id import make_random_ids, DEFAULT_USED_IDS_DATABASE
 from constants import BATCHES_DIR_NAME
 from metadata import Metadata, DEFAULT_METADATA_OUT_FILENAME
-from get_files import get_files, FileTypeException, VCF_filename, BAM_filename, BAI_filename, FASTQ_filename
+from get_files import get_files, Data_filename, FileTypeException, VCF_filename, BAM_filename, BAI_filename, FASTQ_filename
 from vcf_edit import vcf_edit
 from bam_edit import bam_edit
 from version import program_version
@@ -89,11 +89,9 @@ def link_files(application_dir, filepaths):
     return output_files
 
 
-def anonymise_files(filenames, randomised_ids, application_dir, filename_type, file_editor=None):
+def anonymise_files(filenames: list[str], randomised_ids: list[str], application_dir: str, filename_type: Data_filename, file_editor=None):
     output_files = []
-
     randomised_batch_ids = {}
-    # randomised_flowcell_ids = {}
 
     for file_path in filenames:
         try:
@@ -111,29 +109,22 @@ def anonymise_files(filenames, randomised_ids, application_dir, filename_type, f
                 new_id = str(randomised_ids[old_id])
                 file_handler.replace_sample_id(new_id)
 
-            # replace batch id with XXXXX: AGRF_024
-            # 010108101_AGRF_024_HG3JKBCXX_CGTACTAG_L001_R1.fastq.gz
+            # Replace batch id AGRF_024 with XXXXX
+            # Example filename: 010108101_AGRF_024_HG3JKBCXX_CGTACTAG_L001_R1.fastq.gz
             fields = file_handler.get_fields(file_handler.get_filename())
+
+            # Example old_batch_id: AGRF_024
             old_batch_id = fields[1] + '_' + fields[2]
+
+            # Key by old_batch_id because we want to make sure the same batch id gets the same new randomised batch id
             if old_batch_id not in randomised_batch_ids:
                 new_batch_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for x in range(5))
                 randomised_batch_ids[old_batch_id] = new_batch_id
 
+            # Replace AGRF_024 (field 1 and 2) with XXXXX
             file_handler.replace_field(randomised_batch_ids[old_batch_id], 1, 2)
 
-            # # replace flow cell id: HG3JKBCXX
-            # # 010108101_AGRF_024_HG3JKBCXX_CGTACTAG_L001_R1.fastq.gz
-            # # after batch renamed from AGRF_027 to XXXXX
-            # # 010108101_xxxxx_HG3JKBCXX_CGTACTAG_L001_R1.fastq.gz
-            # fields = file_handler.get_fields(file_handler.get_filename())
-            # old_flowcell_id = fields[2]
-            # if old_flowcell_id not in randomised_flowcell_ids:
-            #     new_flowcell_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for x in range(9))
-            #     randomised_flowcell_ids[old_flowcell_id] = new_flowcell_id
-            #
-            # file_handler.replace_field(randomised_flowcell_ids[old_flowcell_id], 2)
-
-            # file_handler has updated file name at this point
+            # file_handler has updated filename (attribute of this object) at this point
             new_filename = file_handler.get_filename()
             new_path = os.path.join(application_dir, new_filename)
             output_files.append(new_path)

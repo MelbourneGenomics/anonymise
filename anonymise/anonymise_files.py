@@ -1,12 +1,10 @@
 import os
-import csv
 import argparse
 import pymongo
 import glob
 import random
 import string
 
-from datetime import datetime
 from pymongo import MongoClient
 
 from random_id import make_random_ids
@@ -57,24 +55,12 @@ def get_new_batch_ids(samples):
 
     return new_batch_ids
 
-def get_new_lib_ids(samples):
-    # new_batch_num_digits = 5
 
-    new_batch_ids = {}
-    batch_number = 0
-    length = 5
-    for sample in samples:
-        # print(sample)
-        agrf_batch_no = sample['batch_no']
-        if len(new_batch_ids) == 0 or agrf_batch_no not in new_batch_ids:
-            batch_number += 1
-            # new_batch_id = str(batch_number).rjust(new_batch_num_digits, 'X')
-            new_batch_id = ''.join(random.choice(string.ascii_lowercase + string.digits) for x in range(length))
-            new_batch_ids[agrf_batch_no] = new_batch_id
+def anonymise_fastq_files():
+    """
+    Anonymise FASTQ files data request per flagship
 
-    return new_batch_ids
-
-def main():
+    """
     options = parse_args()
 
     data_dir = options.data_dir
@@ -83,43 +69,22 @@ def main():
     request_id = options.request_id
 
     sample_ids = []
-    filepaths = []
+    file_paths = []
     samples = get_samples(request_id, flagship)
     for sample in samples:
         batch_dir = os.path.join(data_dir, sample['batch_no'], sample['lab_sample_id'])
         sample_files = glob.glob(batch_dir + '*' + FASTQ_SUFFIX)
         if sample_files:
             sample_ids.append(sample['lab_sample_id'])
-            filepaths += sample_files
+            file_paths += sample_files
         else:
-            print('WARNING: no file found for sample ' + sample['lab_sample_id'])
-
-    # new_sample_ids = make_random_ids('used_random_sample_ids.db', sample_ids)
-    # new_batch_ids = get_new_batch_ids(samples)
-
-    # randomised_ids = {
-    #     'sample': new_sample_ids,
-    #     'batch': new_batch_ids
-    # }
+            print('WARNING: No FASTQ file found for sample ' + sample['lab_sample_id'])
 
     randomised_ids = make_random_ids('used_random_sample_ids.db', sample_ids)
-    randomised_files = anonymise_files(filepaths, randomised_ids, release_dir, FASTQ_filename)
+    randomised_files = anonymise_files(file_paths, randomised_ids, release_dir, FASTQ_filename)
 
-    # for file in randomised_files:
-    #     print(file)
+    return randomised_files
 
 
 if __name__ == '__main__':
-    main()
-
-# data_dir = '/Users/juny/Downloads/fastq'
-# application_dir = '/Users/juny/Downloads/fastq/output'
-# sample_ids = ['010107101', '020434901']
-# randomised_ids = make_random_ids('used_random_sample_ids.db', sample_ids)
-# print(randomised_ids)
-#
-# filenames = os.listdir(data_dir)
-# filepaths = [os.path.join(data_dir, filename) for filename in filenames]
-# print(filepaths)
-# randomised_files = anonymise_files(filepaths, randomised_ids, application_dir, FASTQ_filename)
-# print(randomised_files)
+    anonymise_fastq_files()
